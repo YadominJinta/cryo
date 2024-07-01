@@ -1,6 +1,5 @@
 use crate::{err, CollectError, ColumnEncoding, ToU256Series, U256Type};
-use ethers::prelude::*;
-use ethers_core::abi::{AbiEncode, EventParam, HumanReadableParser, ParamType, RawLog, Token};
+use alloy::dyn_abi::EventExt
 use polars::prelude::*;
 use std::collections::HashSet;
 

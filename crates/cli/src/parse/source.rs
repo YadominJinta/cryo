@@ -1,8 +1,8 @@
 use std::env;
 
 use crate::args::Args;
+use alloy::{providers::{IpcConnect, Provider, ProviderBuilder, WsConnect}, pubsub::PubSubConnect, rpc::client::ClientBuilder, transports::http::reqwest::Url};
 use cryo_freeze::{sources::ProviderWrapper, ParseError, Source, SourceLabels};
-use ethers::prelude::*;
 use governor::{Quota, RateLimiter};
 use polars::prelude::*;
 use std::num::NonZeroU32;
@@ -11,25 +11,33 @@ pub(crate) async fn parse_source(args: &Args) -> Result<Source, ParseError> {
     // parse network info
     let rpc_url = parse_rpc_url(args)?;
     let (provider, chain_id): (ProviderWrapper, u64) = if rpc_url.starts_with("http") {
-        let provider = Provider::<RetryClient<Http>>::new_client(
-            &rpc_url,
-            args.max_retries,
-            args.initial_backoff,
-        )
-        .map_err(|_e| ParseError::ParseError("could not connect to provider".to_string()))?;
-        let chain_id = provider.get_chainid().await.map_err(ParseError::ProviderError)?.as_u64();
+        // let provider = Provider::<RetryClient<Http>>::new_client(
+        //     &rpc_url,
+        //     args.max_retries,
+        //     args.initial_backoff,
+        // )
+        // .map_err(|_e| ParseError::ParseError("could not connect to provider".to_string()))?;
+        // let chain_id = provider.get_chainid().await.map_err(ParseError::ProviderError)?.as_u64();
+        let url: Url = rpc_url.parse()?;
+        let provider = ProviderBuilder::new().on_http(url);
+        let chain_id = provider.get_chain_id().await.map_err(ParseError::ProviderError)?;
         (provider.into(), chain_id)
     } else if rpc_url.starts_with("ws") {
-        let provider = Provider::<Ws>::connect(&rpc_url).await.map_err(|_| {
-            ParseError::ParseError("could not instantiate HTTP Provider".to_string())
-        })?;
-        let chain_id = provider.get_chainid().await.map_err(ParseError::ProviderError)?.as_u64();
+        // let provider = Provider::<Ws>::connect(&rpc_url).await.map_err(|_| {
+        //     ParseError::ParseError("could not instantiate HTTP Provider".to_string())
+        // })?;
+        // let chain_id = provider.get_chainid().await.map_err(ParseError::ProviderError)?.as_u64();
+        let ws = WsConnect::new(rpc_url);
+        let provider = ProviderBuilder::new().on_ws(ws).await?;
+        let chain_id = provider.get_chain_id().await.map_err(ParseError::ProviderError)?;
         (provider.into(), chain_id)
     } else if rpc_url.ends_with(".ipc") {
-        let provider: Provider<Ipc> = Provider::connect_ipc(&rpc_url).await.map_err(|_| {
-            ParseError::ParseError("could not instantiate HTTP Provider".to_string())
-        })?;
-        let chain_id = provider.get_chainid().await.map_err(ParseError::ProviderError)?.as_u64();
+        // let provider: Provider<Ipc> = Provider::connect_ipc(&rpc_url).await.map_err(|_| {
+        //     ParseError::ParseError("could not instantiate HTTP Provider".to_string())
+        // })?;
+        let ipc = IpcConnect::new(rpc_url);
+        let provider = ProviderBuilder::new().on_ipc(ipc).await?;
+        let chain_id = provider.get_chain_id().await.map_err(ParseError::ProviderError)?.as_u64();
         (provider.into(), chain_id)
     } else {
         return Err(ParseError::ParseError(format!("invalid rpc url: {}", rpc_url)));

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use ethers::prelude::*;
+use alloy::{providers::{IpcConnect, Provider, RootProvider, WsConnect}, rpc::types::{Block, BlockTransactions, Transaction, TransactionReceipt}, transports::http::{Client, Http}};
+use ethers::providers::PubsubClient;
 use governor::{
     clock::DefaultClock,
     middleware::NoOpMiddleware,
@@ -8,7 +9,7 @@ use governor::{
 };
 use tokio::{
     sync::{AcquireError, Semaphore, SemaphorePermit},
-    task,
+    task
 };
 
 use crate::CollectError;
@@ -41,38 +42,31 @@ pub struct Source {
 #[derive(Clone, Debug)]
 pub enum ProviderWrapper {
     /// mock provider
-    MockProvider(Arc<Provider<MockProvider>>),
+    // alloy has no MockProvider
+    // MockProvider(Arc<Provider<MockProvider>>),
     /// http client
-    RetryClientHttp(Arc<Provider<RetryClient<Http>>>),
-    /// websocket client
-    WsClient(Arc<Provider<Ws>>),
-    /// ipc client
-    IpcClient(Arc<Provider<Ipc>>),
+    // RetryClientHttp(Arc<Provider<Http<Client>>>),
+    // /// websocket client
+    // WsClient(Arc<Provider<PubsubClient>>),
+    // /// ipc client
+    // IpcClient(Arc<Provider<>>),
+    HttpClient(Arc<RootProvider<Http<Client>>>),
+    PubsubClient(Arc<RootProvider<PubsubClient>),
 }
 
-impl From<Provider<MockProvider>> for ProviderWrapper {
-    fn from(value: Provider<MockProvider>) -> ProviderWrapper {
-        ProviderWrapper::MockProvider(Arc::new(value))
+impl From<RootProvider<Http<Client>> for ProviderWrapper {
+    fn from(value: RootProvider<Http<Client>>) -> ProviderWrapper {
+        ProviderWrapper::HttpClient(Arc::new(value))
     }
 }
 
-impl From<Provider<RetryClient<Http>>> for ProviderWrapper {
-    fn from(value: Provider<RetryClient<Http>>) -> ProviderWrapper {
-        ProviderWrapper::RetryClientHttp(Arc::new(value))
+impl From<RootProvider<PubsubClient> for ProviderWrapper {
+    fn from(value: RootProvider<PubsubClient>) -> ProviderWrapper {
+        ProviderWrapper::PubsubClient(Arc::new(value))
     }
 }
 
-impl From<Provider<Ws>> for ProviderWrapper {
-    fn from(value: Provider<Ws>) -> ProviderWrapper {
-        ProviderWrapper::WsClient(Arc::new(value))
-    }
-}
 
-impl From<Provider<Ipc>> for ProviderWrapper {
-    fn from(value: Provider<Ipc>) -> ProviderWrapper {
-        ProviderWrapper::IpcClient(Arc::new(value))
-    }
-}
 
 /// extract the provider from a source and run specified method
 #[macro_export]
@@ -95,24 +89,24 @@ impl Source {
         block: &Block<Transaction>,
     ) -> Result<Vec<TransactionReceipt>> {
         let block_number =
-            block.number.ok_or(CollectError::CollectError("no block number".to_string()))?.as_u64();
+            block.header.number.ok_or(CollectError::CollectError("no block number".to_string()))?.as_u64();
         if let Ok(receipts) = self.get_block_receipts(block_number).await {
             return Ok(receipts);
         }
 
-        self.get_tx_receipts(&block.transactions).await
+        self.get_tx_receipts(block.transactions).await
     }
 
     /// Returns all receipts for vector of transactions using `eth_getTransactionReceipt`
     pub async fn get_tx_receipts(
         &self,
-        transactions: &Vec<Transaction>,
+        transactions: BlockTransactions<Transaction>,
     ) -> Result<Vec<TransactionReceipt>> {
         let mut tasks = Vec::new();
-        for tx in transactions {
+        for tx in transactions.as_transactions().unwrap() {
             let tx_hash = tx.hash;
             let source = self.clone();
-            let task = task::spawn(async move {
+            let task: task::JoinHandle<std::result::Result<TransactionReceipt, CollectError>> = task::spawn(async move {
                 match source.get_transaction_receipt(tx_hash).await? {
                     Some(receipt) => Ok(receipt),
                     None => {

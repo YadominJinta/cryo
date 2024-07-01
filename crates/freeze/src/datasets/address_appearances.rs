@@ -1,5 +1,8 @@
 use crate::*;
-use ethers::prelude::*;
+use alloy::rpc::types::{
+    eth::{Block, Log},
+    trace::parity::LocalizedTransactionTrace
+};
 use polars::prelude::*;
 use std::collections::HashMap;
 
@@ -34,7 +37,7 @@ impl Dataset for AddressAppearances {
     }
 }
 
-type BlockLogsTraces = (Block<TxHash>, Vec<Log>, Vec<Trace>);
+type BlockLogsTraces = (Block, Vec<Log>, Vec<LocalizedTransactionTrace>);
 
 #[async_trait::async_trait]
 impl CollectByBlock for AddressAppearances {

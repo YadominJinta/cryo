@@ -1,6 +1,6 @@
 use crate::CollectError;
 /// conversion operations
-use ethers::prelude::*;
+use alloy::primitives::{Bytes, U256, I256};
 use prefix_hex;
 
 /// convert Bytes to u32

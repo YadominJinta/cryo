@@ -1,5 +1,5 @@
 use crate::*;
-use ethers::prelude::*;
+use alloy::primitives::{U256, I256, B256};
 use polars::prelude::*;
 
 /// Converts a Vec of U256-like data into a polars Series

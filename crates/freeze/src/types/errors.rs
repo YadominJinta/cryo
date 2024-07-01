@@ -1,5 +1,4 @@
 /// error specifications
-use ethers::prelude::*;
 use polars::prelude::*;
 use thiserror::Error;
 
